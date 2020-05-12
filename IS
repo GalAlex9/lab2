@@ -1,0 +1,96 @@
+import os
+import numpy as np
+from PIL import Image
+from nn import Net
+#from sklearn.utils import shuffle
+
+def rgb2gray(rgb):
+    return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])/255.0
+
+def load_data(path):
+    X, y = [], []
+    num_classes = len(os.listdir(path))
+    for c in os.listdir(path):
+        for i in os.listdir(path+'\\'+c):
+            im = np.array(Image.open(path+'\\'+c+'\\'+i))
+            im = rgb2gray(im)
+            X.append(im)
+            y_ = np.zeros((num_classes,1))
+            
+            y_[int(c)] = 1
+            y.append(y_)
+    X = np.array(X)
+    y = np.array(y)
+    return X, y
+
+#X, y = load_data("data\\train\\")
+X, y = load_data("mnist\\train\\")
+c, w, h = X.shape
+X = X.reshape((c,w*h,1))
+#X, y = shuffle(X, y)
+
+X_test, y_test = load_data("mnist\\test\\")
+c_test, w_test, h_test = X_test.shape
+X_test = X_test.reshape((c_test,w_test*h_test,1))
+
+num_classes = 10
+nn = Net(w*h,num_classes)
+lr = 1.0
+lr_counter = 0
+min_loss = 99
+#dic = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0}
+lr_graph = {}
+err_graph = {}
+for e in range(1000):
+    errors = 0
+    loss = 0
+    test_errors = 0
+    test_loss = 0
+    correct = 0
+    for i in range(c):
+        actual = y[i]
+        ans = nn.forward(X[i])
+        
+        correct = correct + 1 if np.argmax(ans) == np.argmax(actual) else correct
+        nn.backward(actual,ans,X[i],lr)
+        
+        loss += nn.cross_entropy(ans, actual)
+        
+    #LR scheduler    
+    cur_loss = loss/c
+    
+    if (cur_loss > min_loss):
+            lr_counter += 1
+    else:
+        min_loss = cur_loss
+    if lr_counter == 5:
+        lr*=0.1
+        print("Lr reduced :", lr)
+        lr_counter = 0
+    print("Epoch : ", e+1)
+    print("Train Loss: ", cur_loss)
+    print("Train accuracy: ", correct/c)
+    
+    
+    #test part
+    for j in range(c_test):
+        actual_test = y_test[j]
+        ans_test = nn.forward(X_test[j])
+        test_loss += nn.cross_entropy(ans_test,actual_test)
+        if np.argmax(actual_test) != np.argmax(ans_test):
+            test_errors += 1
+    print("Test Accuracy: ", 1 - test_errors/c_test)
+    print("Test Loss: " , test_loss/c_test)
+    print("-"*20)
+    lr_graph[e] = lr
+    err_graph[e] = test_loss/c_test
+    if lr < 1e-25:
+        print("LR is too small")
+        break
+errors = 0
+for n in range(c_test):
+    actual = y_test[n]
+    ans = nn.forward(X_test[n])
+    if np.argmax(actual) != np.argmax(ans):
+        errors += 1
+print("Accuracy", 1 - errors/c_test)
